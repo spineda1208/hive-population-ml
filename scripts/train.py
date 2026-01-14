@@ -54,7 +54,14 @@ def parse_args():
         "--task",
         type=str,
         default="population",
-        choices=["population", "winter"],
+        choices=[
+            "population",
+            "winter",
+            "varroa",
+            "honey_yield",
+            "defensive",
+            "hygienic",
+        ],
         help="Prediction task",
     )
     parser.add_argument(

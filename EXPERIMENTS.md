@@ -107,7 +107,73 @@ Each directory contains:
 
 5. **Ensemble methods** - Combine MLP with sequence models for potentially better generalization
 
+---
+
+## Phenotypic Task Experiments
+
+Following the recommendations from the population classification experiments, we extended the framework to support additional phenotypic traits: **Varroa infestation** and **honey yield prediction**.
+
+### Multi-Scale Temporal Features
+
+We implemented multi-scale temporal aggregation to better capture trends:
+- **Weekly statistics**: Trend across 7-day windows (std, range of weekly means)
+- **Monthly statistics**: Trend across 30-day windows
+- **Early vs late comparison**: Detects trajectory changes within the observation period
+
+This increased feature dimensionality from 110 to **308 features**.
+
+### Varroa Infestation Prediction
+
+**Dataset**: 53 samples (extremely limited)
+
+| Model | MAE | RMSE | R² |
+|-------|-----|------|-----|
+| **Lasso** | **0.410** | **0.519** | **-0.047** |
+| Ridge | 0.418 | 0.531 | -0.091 |
+| RandomForest | 0.424 | 0.553 | -0.185 |
+| GradientBoosting | 0.436 | 0.557 | -0.200 |
+| Ensemble_Weighted | 0.417 | 0.535 | -0.109 |
+| MLP (baseline) | 0.475 | 0.548 | -0.226 |
+
+**Finding**: All models fail to predict Varroa infestation (negative R² indicates worse than mean prediction). The dataset is too small (53 samples, 308 features) and the target variable has high variance that cannot be explained by sensor data alone.
+
+### Honey Yield Prediction
+
+**Dataset**: 46 samples
+
+| Model | MAE | RMSE | R² |
+|-------|-----|------|-----|
+| **RandomForest** | **10.26** | **13.12** | **0.372** |
+| GradientBoosting | 10.27 | 14.10 | 0.274 |
+| Ensemble_Weighted | 10.08 | 13.40 | 0.345 |
+| Ridge | 11.52 | 14.98 | 0.181 |
+| Lasso | 12.71 | 15.83 | 0.086 |
+
+**Finding**: RandomForest achieves R² = 0.37, explaining ~37% of honey yield variance from sensor data. This is a meaningful signal despite the small dataset.
+
+### Key Insights from Phenotypic Experiments
+
+1. **Small datasets favor traditional ML**: With only 46-53 samples, deep learning (MLP) underperforms compared to RandomForest and regularized linear models.
+
+2. **Varroa is unpredictable from sensors alone**: Varroa infestation levels likely depend on factors not captured by hive sensors (e.g., treatment history, nearby apiaries, seasonal mite reproduction cycles).
+
+3. **Honey yield shows promise**: The positive R² suggests sensor data does contain information about honey production potential, likely through activity patterns and environmental conditions.
+
+4. **Multi-scale features help**: The temporal trend features provide richer representations than simple statistics, though more data is needed to fully leverage them.
+
+### Saved Results
+
+Phenotypic experiment results in `results/`:
+- `mlp_varroa_baseline/` - MLP baseline on Varroa
+- `mlp_varroa_regularized/` - MLP with stronger regularization
+- `ensemble_varroa_*/` - Ensemble methods on Varroa
+- `ensemble_honey_yield_*/` - Ensemble methods on honey yield
+
+---
+
 ## Reproducing Results
+
+### Population Classification (Best: MLP)
 
 ```bash
 # MLP (best performing)
@@ -121,4 +187,14 @@ uv run python scripts/train.py --model lstm --task population --task-type classi
 # Transformer
 uv run python scripts/train.py --model transformer --task population --task-type classification \
     --epochs 100 --batch-size 32 --learning-rate 1e-3 --hidden-dim 64 --num-layers 2
+```
+
+### Phenotypic Tasks (Ensemble)
+
+```bash
+# Varroa prediction (ensemble)
+uv run python scripts/train_ensemble.py --task varroa
+
+# Honey yield prediction (ensemble)
+uv run python scripts/train_ensemble.py --task honey_yield
 ```

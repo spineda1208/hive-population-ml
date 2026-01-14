@@ -22,6 +22,7 @@ from .loader import (
     load_phenotypic_measurements,
     load_winter_mortality,
 )
+from .preprocessing import create_phenotypic_dataset
 from .preprocessing import (
     create_population_dataset,
     create_phenotypic_dataset,
@@ -555,6 +556,35 @@ def create_dataloaders(
         )
         test_ds = HiveDataset(
             test_df, target_col, scaler=train_ds.scaler, task_type="classification"
+        )
+
+    elif task in ("varroa", "honey_yield", "defensive", "hygienic"):
+        from .preprocessing import create_phenotypic_dataset
+
+        phenotypic_df = load_phenotypic_measurements(data_path)
+        population_df = load_population_annotations(data_path)
+
+        full_df = create_phenotypic_dataset(
+            sensor_df, phenotypic_df, population_df, window_days
+        )
+
+        target_col_map = {
+            "varroa": "varroa_avg",
+            "honey_yield": "honey_yield_kg",
+            "defensive": "defensive_avg",
+            "hygienic": "hygienic_avg",
+        }
+        target_col = target_col_map[task]
+
+        train_df, val_df, test_df = split_by_hive(full_df)
+        train_ds = HiveDataset(
+            train_df, target_col, fit_scaler=True, task_type="regression"
+        )
+        val_ds = HiveDataset(
+            val_df, target_col, scaler=train_ds.scaler, task_type="regression"
+        )
+        test_ds = HiveDataset(
+            test_df, target_col, scaler=train_ds.scaler, task_type="regression"
         )
 
     else:

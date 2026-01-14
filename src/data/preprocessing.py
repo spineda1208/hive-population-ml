@@ -204,12 +204,84 @@ def create_population_dataset(
     return pd.DataFrame(records)
 
 
+def extract_multiscale_features(
+    hive_data: pd.DataFrame,
+    features: List[str],
+    scales: List[str] = ["weekly", "monthly"],
+) -> Dict[str, float]:
+    """
+    Extract features at multiple temporal scales.
+
+    Args:
+        hive_data: DataFrame with sensor data for one hive
+        features: List of feature columns
+        scales: List of scales to compute ('weekly', 'monthly', 'early', 'late')
+
+    Returns:
+        Dictionary of multi-scale features
+    """
+    result = {}
+
+    if len(hive_data) == 0:
+        return result
+
+    hive_data = hive_data.copy()
+    hive_data["week"] = hive_data["timestamp"].dt.isocalendar().week
+    hive_data["month"] = hive_data["timestamp"].dt.month
+
+    mid_idx = len(hive_data) // 2
+
+    for feature in features:
+        if feature not in hive_data.columns:
+            continue
+        values = hive_data[feature].dropna()
+        if len(values) == 0:
+            continue
+
+        # Overall statistics (baseline)
+        result[f"{feature}_overall_mean"] = values.mean()
+        result[f"{feature}_overall_std"] = values.std()
+
+        # Weekly aggregation - compute variance across weekly means
+        if "weekly" in scales:
+            weekly_means = hive_data.groupby("week")[feature].mean()
+            if len(weekly_means) > 1:
+                result[f"{feature}_weekly_trend_std"] = weekly_means.std()
+                result[f"{feature}_weekly_trend_range"] = (
+                    weekly_means.max() - weekly_means.min()
+                )
+
+        # Monthly aggregation
+        if "monthly" in scales:
+            monthly_means = hive_data.groupby("month")[feature].mean()
+            if len(monthly_means) > 1:
+                result[f"{feature}_monthly_trend_std"] = monthly_means.std()
+                result[f"{feature}_monthly_trend_range"] = (
+                    monthly_means.max() - monthly_means.min()
+                )
+
+        # Early vs late period comparison
+        if "early_late" in scales or True:
+            early_values = values.iloc[:mid_idx] if mid_idx > 0 else values
+            late_values = values.iloc[mid_idx:] if mid_idx < len(values) else values
+
+            if len(early_values) > 0 and len(late_values) > 0:
+                result[f"{feature}_early_mean"] = early_values.mean()
+                result[f"{feature}_late_mean"] = late_values.mean()
+                result[f"{feature}_trend_change"] = (
+                    late_values.mean() - early_values.mean()
+                )
+
+    return result
+
+
 def create_phenotypic_dataset(
     sensor_df: pd.DataFrame,
     phenotypic_df: pd.DataFrame,
     population_df: pd.DataFrame,
     window_days: int = 7,
     aggregation_period: str = "summer",
+    use_multiscale: bool = True,
 ) -> pd.DataFrame:
     """
     Create a dataset for multi-task phenotypic prediction.
@@ -223,6 +295,7 @@ def create_phenotypic_dataset(
         population_df: Population annotations (for date reference)
         window_days: Window for temporal features
         aggregation_period: 'summer' to use summer data, 'all' for all data
+        use_multiscale: Whether to extract multi-scale temporal features
 
     Returns:
         DataFrame with features and multi-task labels
@@ -283,6 +356,13 @@ def create_phenotypic_dataset(
             features[f"{feature}_daily_range"] = (
                 daily_pattern.max() - daily_pattern.min()
             )
+
+        # Add multi-scale temporal features
+        if use_multiscale:
+            multiscale_features = extract_multiscale_features(
+                hive_data, SENSOR_FEATURES, scales=["weekly", "monthly"]
+            )
+            features.update(multiscale_features)
 
         # Add labels
         features["hive_id"] = hive_id
