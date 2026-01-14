@@ -40,7 +40,7 @@ ENV/
 .ipynb_checkpoints
 
 # Project specific
-data/
+/data/
 checkpoints/
 results/
 *.pt
