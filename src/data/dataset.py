@@ -158,7 +158,8 @@ class HiveSequenceDataset(Dataset):
         scaler: Optional[StandardScaler] = None,
         fit_scaler: bool = False,
         task_type: str = "regression",
-        max_seq_len: int = 2016,  # 7 days * 24 hours * 12 readings/hour
+        max_seq_len: int = 168,  # 7 days * 24 hours (hourly sampling)
+        subsample_factor: int = 12,  # Subsample to hourly from 5-min data
     ):
         """
         Args:
@@ -176,6 +177,7 @@ class HiveSequenceDataset(Dataset):
         self.target_col = target_col
         self.window_days = window_days
         self.max_seq_len = max_seq_len
+        self.subsample_factor = subsample_factor
 
         if features is None:
             features = SENSOR_FEATURES
@@ -226,9 +228,13 @@ class HiveSequenceDataset(Dataset):
             if len(hive_data) < 10:
                 continue
 
-            # Extract sequence
+            # Extract sequence and subsample
             seq = hive_data[self.features].values.astype(np.float32)
             seq = np.nan_to_num(seq, nan=0.0)
+
+            # Subsample to reduce sequence length (e.g., hourly from 5-min data)
+            if self.subsample_factor > 1 and len(seq) > self.subsample_factor:
+                seq = seq[:: self.subsample_factor]
 
             # Get target - handle classification by computing from frames_of_bees
             if target_col == "population_class":
